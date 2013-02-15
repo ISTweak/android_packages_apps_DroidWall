@@ -54,7 +54,7 @@ import android.widget.Toast;
  */
 public final class Api {
 	/** application version string */
-	public static final String VERSION = "1.5.7-IS-2";
+	public static final String VERSION = "1.6.0";
 	/** special application UID used to indicate "any application" */
 	public static final int SPECIAL_UID_ANY	= -10;
 	/** special application UID used to indicate the Linux Kernel */
@@ -67,6 +67,7 @@ public final class Api {
 	public static final String PREFS_NAME 			= "DroidWallPrefs";
 	public static final String PREF_3G_UIDS			= "AllowedUids3G";
 	public static final String PREF_WIFI_UIDS		= "AllowedUidsWifi";
+	public static final String PREF_WIMAX_UIDS		= "AllowedUidsWiMax";
 	public static final String PREF_PASSWORD 		= "Password";
 	public static final String PREF_CUSTOMSCRIPT 	= "CustomScript";
 	public static final String PREF_CUSTOMSCRIPT2 	= "CustomScript2"; // Executed on shutdown
@@ -181,13 +182,14 @@ public final class Api {
      * @param uids3g list of selected UIDs for 2G/3G to allow or disallow (depending on the working mode)
      * @param showErrors indicates if errors should be alerted
      */
-	private static boolean applyIptablesRulesImpl(Context ctx, List<Integer> uidsWifi, List<Integer> uids3g, boolean showErrors) {
+	private static boolean applyIptablesRulesImpl(Context ctx, List<Integer> uidsWifi, List<Integer> uids3g, List<Integer> uidsWimax, boolean showErrors) {
 		if (ctx == null) {
 			return false;
 		}
 		assertBinaries(ctx, showErrors);
 		final String ITFS_WIFI[] = {"tiwlan+", "wlan+", "eth+", "ra+"};
-		final String ITFS_3G[] = {"rmnet+","pdp+","ppp+","uwbr+","wimax+","vsnet+","ccmni+","usb+"};
+		final String ITFS_3G[] = {"rmnet+","pdp+","ppp+","uwbr+","vsnet+","ccmni+","usb+"};
+		final String ITFS_WIMAX[] = {"wimax+"};
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		final boolean whitelist = prefs.getString(PREF_MODE, MODE_WHITELIST).equals(MODE_WHITELIST);
 		final boolean blacklist = !whitelist;
@@ -204,6 +206,7 @@ public final class Api {
 				"$IPTABLES -L droidwall >/dev/null 2>/dev/null || $IPTABLES --new droidwall || exit 2\n" +
 				"$IPTABLES -L droidwall-3g >/dev/null 2>/dev/null || $IPTABLES --new droidwall-3g || exit 3\n" +
 				"$IPTABLES -L droidwall-wifi >/dev/null 2>/dev/null || $IPTABLES --new droidwall-wifi || exit 4\n" +
+				"$IPTABLES -L droidwall-wimax >/dev/null 2>/dev/null || $IPTABLES --new droidwall-wimax || exit 4\n" +
 				"$IPTABLES -L droidwall-reject >/dev/null 2>/dev/null || $IPTABLES --new droidwall-reject || exit 5\n" +
 				"# Add droidwall chain to OUTPUT chain if necessary\n" +
 				"$IPTABLES -L OUTPUT | $GREP -q droidwall || $IPTABLES -A OUTPUT -j droidwall || exit 6\n" +
@@ -211,6 +214,7 @@ public final class Api {
 				"$IPTABLES -F droidwall || exit 7\n" +
 				"$IPTABLES -F droidwall-3g || exit 8\n" +
 				"$IPTABLES -F droidwall-wifi || exit 9\n" +
+				"$IPTABLES -F droidwall-wimax || exit 9\n" +
 				"$IPTABLES -F droidwall-reject || exit 10\n" +
 			"");
 			// Check if logging is enabled
@@ -242,11 +246,15 @@ public final class Api {
 			for (final String itf : ITFS_WIFI) {
 				script.append("$IPTABLES -A droidwall -o ").append(itf).append(" -j droidwall-wifi || exit\n");
 			}
+			for (final String itf : ITFS_WIMAX) {
+				script.append("$IPTABLES -A droidwall -o ").append(itf).append(" -j droidwall-wimax || exit\n");
+			}
 			
 			script.append("# Filtering rules\n");
 			final String targetRule = (whitelist ? "RETURN" : "droidwall-reject");
 			final boolean any_3g = uids3g.indexOf(SPECIAL_UID_ANY) >= 0;
 			final boolean any_wifi = uidsWifi.indexOf(SPECIAL_UID_ANY) >= 0;
+			final boolean any_wimax = uidsWimax.indexOf(SPECIAL_UID_ANY) >= 0;
 			if (whitelist && !any_wifi) {
 				// When "white listing" wifi, we need to ensure that the dhcp and wifi users are allowed
 				int uid = android.os.Process.getUidForName("dhcp");
@@ -282,6 +290,17 @@ public final class Api {
 					if (uid >= 0) script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
 				}
 			}
+			if (any_wimax) {
+				if (blacklist) {
+					/* block any application on this interface */
+					script.append("$IPTABLES -A droidwall-wimax -j ").append(targetRule).append(" || exit\n");
+				}
+			} else {
+				/* release/block individual applications on this interface */
+				for (final Integer uid : uidsWifi) {
+					if (uid >= 0) script.append("$IPTABLES -A droidwall-wimax -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
+				}
+			}
 			if (whitelist) {
 				if (!any_3g) {
 					if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
@@ -299,6 +318,14 @@ public final class Api {
 						script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
 					}
 				}
+				if (!any_wimax) {
+					if (uidsWifi.indexOf(SPECIAL_UID_KERNEL) >= 0) {
+						script.append("# hack to allow kernel packets on white-list\n");
+						script.append("$IPTABLES -A droidwall-wimax -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
+					} else {
+						script.append("$IPTABLES -A droidwall-wimax -j droidwall-reject || exit\n");
+					}
+				}
 			} else {
 				if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 					script.append("# hack to BLOCK kernel packets on black-list\n");
@@ -309,6 +336,11 @@ public final class Api {
 					script.append("# hack to BLOCK kernel packets on black-list\n");
 					script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner 0:999999999 -j RETURN || exit\n");
 					script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
+				}
+				if (uidsWimax.indexOf(SPECIAL_UID_KERNEL) >= 0) {
+					script.append("# hack to BLOCK kernel packets on black-list\n");
+					script.append("$IPTABLES -A droidwall-wimax -m owner --uid-owner 0:999999999 -j RETURN || exit\n");
+					script.append("$IPTABLES -A droidwall-wimax -j droidwall-reject || exit\n");
 				}
 			}
 	    	final StringBuilder res = new StringBuilder();
@@ -343,6 +375,7 @@ public final class Api {
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
 		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		final String savedUids_wimax = prefs.getString(PREF_WIMAX_UIDS, "");
 		final List<Integer> uids_wifi = new LinkedList<Integer>();
 		if (savedUids_wifi.length() > 0) {
 			// Check which applications are allowed on wifi
@@ -371,7 +404,21 @@ public final class Api {
 				}
 			}
 		}
-		return applyIptablesRulesImpl(ctx, uids_wifi, uids_3g, showErrors);
+		final List<Integer> uids_wimax = new LinkedList<Integer>();
+		if (savedUids_wimax.length() > 0) {
+			// Check which applications are allowed on wifi
+			final StringTokenizer tok = new StringTokenizer(savedUids_wimax, "|");
+			while (tok.hasMoreTokens()) {
+				final String uid = tok.nextToken();
+				if (!uid.equals("")) {
+					try {
+						uids_wimax.add(Integer.parseInt(uid));
+					} catch (Exception ex) {
+					}
+				}
+			}
+		}
+		return applyIptablesRulesImpl(ctx, uids_wifi, uids_3g, uids_wimax, showErrors);
 	}
 	
     /**
@@ -397,6 +444,7 @@ public final class Api {
 		// Builds a pipe-separated list of names
 		final StringBuilder newuids_wifi = new StringBuilder();
 		final StringBuilder newuids_3g = new StringBuilder();
+		final StringBuilder newuids_wimax = new StringBuilder();
 		for (int i=0; i<apps.length; i++) {
 			if (apps[i].selected_wifi) {
 				if (newuids_wifi.length() != 0) newuids_wifi.append('|');
@@ -406,11 +454,16 @@ public final class Api {
 				if (newuids_3g.length() != 0) newuids_3g.append('|');
 				newuids_3g.append(apps[i].uid);
 			}
+			if (apps[i].selected_wimax) {
+				if (newuids_wimax.length() != 0) newuids_wimax.append('|');
+				newuids_wimax.append(apps[i].uid);
+			}
 		}
 		// save the new list of UIDs
 		final Editor edit = prefs.edit();
 		edit.putString(PREF_WIFI_UIDS, newuids_wifi.toString());
 		edit.putString(PREF_3G_UIDS, newuids_3g.toString());
+		edit.putString(PREF_WIMAX_UIDS, newuids_wimax.toString());
 		edit.commit();
     }
     
@@ -433,6 +486,7 @@ public final class Api {
 					"$IPTABLES -F droidwall-reject\n" +
 					"$IPTABLES -F droidwall-3g\n" +
 					"$IPTABLES -F droidwall-wifi\n" +
+					"$IPTABLES -F droidwall-wimax\n" +
 	    			"");
 	    	if (customScript.length() > 0) {
 				script.append("\n# BEGIN OF CUSTOM SCRIPT (user-defined)\n");
@@ -588,8 +642,10 @@ public final class Api {
 		// allowed application names separated by pipe '|' (persisted)
 		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
 		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		final String savedUids_wimax = prefs.getString(PREF_WIMAX_UIDS, "");
 		int selected_wifi[] = new int[0];
 		int selected_3g[] = new int[0];
+		int selected_wimax[] = new int[0];
 		if (savedUids_wifi.length() > 0) {
 			// Check which applications are allowed
 			final StringTokenizer tok = new StringTokenizer(savedUids_wifi, "|");
@@ -623,6 +679,23 @@ public final class Api {
 			}
 			// Sort the array to allow using "Arrays.binarySearch" later
 			Arrays.sort(selected_3g);
+		}
+		if (savedUids_wimax.length() > 0) {
+			// Check which applications are allowed
+			final StringTokenizer tok = new StringTokenizer(savedUids_wimax, "|");
+			selected_wimax = new int[tok.countTokens()];
+			for (int i=0; i<selected_wimax.length; i++) {
+				final String uid = tok.nextToken();
+				if (!uid.equals("")) {
+					try {
+						selected_wimax[i] = Integer.parseInt(uid);
+					} catch (Exception ex) {
+						selected_wimax[i] = -1;
+					}
+				}
+			}
+			// Sort the array to allow using "Arrays.binarySearch" later
+			Arrays.sort(selected_wifi);
 		}
 		try {
 			final PackageManager pkgmanager = ctx.getPackageManager();
@@ -670,19 +743,22 @@ public final class Api {
 				if (!app.selected_3g && Arrays.binarySearch(selected_3g, app.uid) >= 0) {
 					app.selected_3g = true;
 				}
+				if (!app.selected_wimax && Arrays.binarySearch(selected_wimax, app.uid) >= 0) {
+					app.selected_wimax = true;
+				}
 			}
 			if (changed) {
 				edit.commit();
 			}
 			/* add special applications to the list */
 			final DroidApp special[] = {
-				new DroidApp(SPECIAL_UID_ANY,"(Any application) - Same as selecting all applications", false, false),
-				new DroidApp(SPECIAL_UID_KERNEL,"(Kernel) - Linux kernel", false, false),
-				new DroidApp(android.os.Process.getUidForName("root"), "(root) - Applications running as root", false, false),
-				new DroidApp(android.os.Process.getUidForName("media"), "Media server", false, false),
-				new DroidApp(android.os.Process.getUidForName("vpn"), "VPN networking", false, false),
-				new DroidApp(android.os.Process.getUidForName("shell"), "Linux shell", false, false),
-				new DroidApp(android.os.Process.getUidForName("gps"), "GPS", false, false),
+				new DroidApp(SPECIAL_UID_ANY,"(Any application) - Same as selecting all applications", false, false, false),
+				new DroidApp(SPECIAL_UID_KERNEL,"(Kernel) - Linux kernel", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("root"), "(root) - Applications running as root", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("media"), "Media server", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("vpn"), "VPN networking", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("shell"), "Linux shell", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("gps"), "GPS", false, false, false),
 			};
 			for (int i=0; i<special.length; i++) {
 				app = special[i];
@@ -693,6 +769,9 @@ public final class Api {
 					}
 					if (Arrays.binarySearch(selected_3g, app.uid) >= 0) {
 						app.selected_3g = true;
+					}
+					if (Arrays.binarySearch(selected_wimax, app.uid) >= 0) {
+						app.selected_wimax = true;
 					}
 					map.put(app.uid, app);
 				}
@@ -896,6 +975,7 @@ public final class Api {
 		// allowed application names separated by pipe '|' (persisted)
 		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
 		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		final String savedUids_wimax = prefs.getString(PREF_WIMAX_UIDS, "");
 		final String uid_str = uid + "";
 		boolean changed = false;
 		// look for the removed application in the "wi-fi" list
@@ -934,6 +1014,24 @@ public final class Api {
 				editor.putString(PREF_3G_UIDS, newuids.toString());
 			}
 		}
+		// look for the removed application in the "wimax" list
+		if (savedUids_wimax.length() > 0) {
+			final StringBuilder newuids = new StringBuilder();
+			final StringTokenizer tok = new StringTokenizer(savedUids_wimax, "|");
+			while (tok.hasMoreTokens()) {
+				final String token = tok.nextToken();
+				if (uid_str.equals(token)) {
+					Log.d("DroidWall", "Removing UID " + token + " from the wimax list (package removed)!");
+					changed = true;
+				} else {
+					if (newuids.length() > 0) newuids.append('|');
+					newuids.append(token);
+				}
+			}
+			if (changed) {
+				editor.putString(PREF_WIMAX_UIDS, newuids.toString());
+			}
+		}
 		// if anything has changed, save the new prefs...
 		if (changed) {
 			editor.commit();
@@ -956,6 +1054,8 @@ public final class Api {
     	boolean selected_wifi;
     	/** indicates if this application is selected for 3g */
     	boolean selected_3g;
+    	/** indicates if this application is selected for wimax */
+    	boolean selected_wimax;
     	/** toString cache */
     	String tostr;
     	/** application info */
@@ -969,11 +1069,12 @@ public final class Api {
     	
     	public DroidApp() {
     	}
-    	public DroidApp(int uid, String name, boolean selected_wifi, boolean selected_3g) {
+    	public DroidApp(int uid, String name, boolean selected_wifi, boolean selected_3g, boolean selected_wimax) {
     		this.uid = uid;
     		this.names = new String[] {name};
     		this.selected_wifi = selected_wifi;
     		this.selected_3g = selected_3g;
+    		this.selected_wimax = selected_wimax;
     	}
     	/**
     	 * Screen representation of this application

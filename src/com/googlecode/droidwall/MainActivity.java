@@ -263,10 +263,10 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 				if (o1.firstseem != o2.firstseem) {
 					return (o1.firstseem ? -1 : 1);
 				}
-				if ((o1.selected_wifi|o1.selected_3g) == (o2.selected_wifi|o2.selected_3g)) {
+				if ((o1.selected_wifi|o1.selected_3g|o1.selected_wimax) == (o2.selected_wifi|o2.selected_3g|o2.selected_wimax)) {
 					return String.CASE_INSENSITIVE_ORDER.compare(o1.names[0], o2.names[0]);
 				}
-				if (o1.selected_wifi || o1.selected_3g) return -1;
+				if (o1.selected_wifi || o1.selected_3g || o1.selected_wimax) return -1;
 				return 1;
 			}
         });
@@ -282,10 +282,12 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
        				entry = new ListEntry();
        				entry.box_wifi = (CheckBox) convertView.findViewById(R.id.itemcheck_wifi);
        				entry.box_3g = (CheckBox) convertView.findViewById(R.id.itemcheck_3g);
+       				entry.box_wimax = (CheckBox) convertView.findViewById(R.id.itemcheck_wimax);
        				entry.text = (TextView) convertView.findViewById(R.id.itemtext);
        				entry.icon = (ImageView) convertView.findViewById(R.id.itemicon);
        				entry.box_wifi.setOnCheckedChangeListener(MainActivity.this);
        				entry.box_3g.setOnCheckedChangeListener(MainActivity.this);
+       				entry.box_wimax.setOnCheckedChangeListener(MainActivity.this);
        				convertView.setTag(entry);
         		} else {
         			// Convert an existing view
@@ -305,6 +307,9 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
         		final CheckBox box_3g = entry.box_3g;
         		box_3g.setTag(app);
         		box_3g.setChecked(app.selected_3g);
+           		final CheckBox box_wimax = entry.box_wimax;
+           		box_wimax.setTag(app);
+           		box_wimax.setChecked(app.selected_wimax);
        			return convertView;
         	}
         };
@@ -574,6 +579,12 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 						this.dirty = true;
 					}
 					break;
+				case R.id.itemcheck_wimax:
+					if (app.selected_wimax != isChecked) {
+						app.selected_wimax = isChecked;
+						this.dirty = true;
+					}
+					break;
 			}
 		}
 	}
@@ -654,6 +665,7 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 	private static class ListEntry {
 		private CheckBox box_wifi;
 		private CheckBox box_3g;
+		private CheckBox box_wimax;
 		private TextView text;
 		private ImageView icon;
 		private DroidApp app;
