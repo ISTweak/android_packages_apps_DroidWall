@@ -44,6 +44,7 @@ import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.widget.Toast;
@@ -751,10 +752,11 @@ public final class Api {
 				edit.commit();
 			}
 			/* add special applications to the list */
+			Resources res = ctx.getResources();
 			final DroidApp special[] = {
-				new DroidApp(SPECIAL_UID_ANY,"(Any application) - Same as selecting all applications", false, false, false),
+				new DroidApp(SPECIAL_UID_ANY, res.getString(R.string.select_all_app), false, false, false),
 				new DroidApp(SPECIAL_UID_KERNEL,"(Kernel) - Linux kernel", false, false, false),
-				new DroidApp(android.os.Process.getUidForName("root"), "(root) - Applications running as root", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("root"), res.getString(R.string.select_root_app), false, false, false),
 				new DroidApp(android.os.Process.getUidForName("media"), "Media server", false, false, false),
 				new DroidApp(android.os.Process.getUidForName("vpn"), "VPN networking", false, false, false),
 				new DroidApp(android.os.Process.getUidForName("shell"), "Linux shell", false, false, false),

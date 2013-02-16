@@ -83,4 +83,6 @@
 \n日本語訳には意訳も含まれます。誤りなどがありましたらご自由に修正ファイルを作者へ提出して下さい。
 \nJapanese Translation by Hiroki Ogawa.
 </string>
+<string name="select_all_app">(全アプリ) - 全てのアプリケーションを選択した事にします</string>
+<string name="select_root_app">(root) - root権限で動作するアプリケーション</string>
 </resources>
