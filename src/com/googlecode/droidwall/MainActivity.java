@@ -35,7 +35,9 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -167,6 +169,15 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 		int resid = (mode.equals(Api.MODE_WHITELIST) ? R.string.mode_whitelist : R.string.mode_blacklist);
 		labelmode.setText(res.getString(R.string.mode_header, res.getString(resid)));
 		resid = (Api.isEnabled(this) ? R.string.title_enabled : R.string.title_disabled);
+		
+		/* get versionName */	
+		PackageManager packageManager = this.getPackageManager();
+		try {
+			PackageInfo packageInfo = packageManager.getPackageInfo(this.getPackageName(), PackageManager.GET_ACTIVITIES);
+		    Api.VERSION = packageInfo.versionName;
+		} catch (NameNotFoundException e) {
+			Log.e(TAG, e.toString());
+		}
 		setTitle(res.getString(resid, Api.VERSION));
     }
     /**
