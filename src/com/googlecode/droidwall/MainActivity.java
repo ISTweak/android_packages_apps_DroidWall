@@ -23,6 +23,8 @@
 
 package com.googlecode.droidwall;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Comparator;
 
@@ -83,6 +85,9 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 	/** indicates if the view has been modified and not yet saved */
 	private boolean dirty = false;
 	
+	private static final String TAG = "DroidWall";
+	public static Boolean hasWimax = false;
+	
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -97,6 +102,10 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 		setContentView(R.layout.main);
 		this.findViewById(R.id.label_mode).setOnClickListener(this);
 		Api.assertBinaries(this, true);
+
+		if ( !hasWimax ) {
+			findViewById(R.id.img_wimax).setVisibility(View.GONE);
+		}
     }
     @Override
     protected void onResume() {
@@ -140,6 +149,12 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
     		changed = true;
     	}
     	if (changed) editor.commit();
+    	
+    	/* check wimax */
+    	String prop = getProperties("init.svc.wimaxDaemon");
+    	if ( prop.length() > 0 ) {
+    		hasWimax = true;
+    	}
     }
     /**
      * Refresh informative header
@@ -278,7 +293,7 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
         		if (convertView == null) {
         			// Inflate a new view
         			convertView = inflater.inflate(R.layout.listitem, parent, false);
-            		Log.d("DroidWall", ">> inflate("+convertView+")");
+            		Log.d(TAG, ">> inflate("+convertView+")");
        				entry = new ListEntry();
        				entry.box_wifi = (CheckBox) convertView.findViewById(R.id.itemcheck_wifi);
        				entry.box_3g = (CheckBox) convertView.findViewById(R.id.itemcheck_3g);
@@ -310,6 +325,9 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
            		final CheckBox box_wimax = entry.box_wimax;
            		box_wimax.setTag(app);
            		box_wimax.setChecked(app.selected_wimax);
+           		if ( !hasWimax ) {
+           			box_wimax.setVisibility(View.GONE);
+           		}
        			return convertView;
         	}
         };
@@ -397,7 +415,7 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
      */
 	private void disableOrEnable() {
 		final boolean enabled = !Api.isEnabled(this);
-		Log.d("DroidWall", "Changing enabled status to: " + enabled);
+		Log.d(TAG, "Changing enabled status to: " + enabled);
 		Api.setEnabled(this, enabled);
 		if (enabled) {
 			applyOrSaveRules();
@@ -525,15 +543,15 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 			public void handleMessage(Message msg) {
     			try {progress.dismiss();} catch(Exception ex){}
 				if (enabled) {
-					Log.d("DroidWall", "Applying rules.");
+					Log.d(TAG, "Applying rules.");
 					if (Api.hasRootAccess(MainActivity.this, true) && Api.applyIptablesRules(MainActivity.this, true)) {
 						Toast.makeText(MainActivity.this, R.string.rules_applied, Toast.LENGTH_SHORT).show();
 					} else {
-						Log.d("DroidWall", "Failed - Disabling firewall.");
+						Log.d(TAG, "Failed - Disabling firewall.");
 						Api.setEnabled(MainActivity.this, false);
 					}
 				} else {
-					Log.d("DroidWall", "Saving rules.");
+					Log.d(TAG, "Saving rules.");
 					Api.saveRules(MainActivity.this);
 					Toast.makeText(MainActivity.this, R.string.rules_saved, Toast.LENGTH_SHORT).show();
 				}
@@ -643,7 +661,7 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 				// Note that we cannot be sure that this view still references "app"
 				return viewToUpdate;
 			} catch (Exception e) {
-				Log.e("DroidWall", "Error loading icon", e);
+				Log.e(TAG, "Error loading icon", e);
 				return null;
 			}
 		}
@@ -654,7 +672,7 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 				final ListEntry entryToUpdate = (ListEntry) viewToUpdate.getTag();
 				entryToUpdate.icon.setImageDrawable(entryToUpdate.app.cached_icon);
 			} catch (Exception e) {
-				Log.e("DroidWall", "Error showing icon", e);
+				Log.e(TAG, "Error showing icon", e);
 			}
 		};
 	}
@@ -669,5 +687,20 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
 		private TextView text;
 		private ImageView icon;
 		private DroidApp app;
+	}
+	
+	public String getProperties(String key)
+	{
+		String line = "";
+		try {
+			Process p = Runtime.getRuntime().exec("getprop " + key);
+			BufferedReader input = new BufferedReader(new InputStreamReader(p.getInputStream()));
+			line = input.readLine();
+			input.close();
+			p.destroy();
+		} catch (Exception err) {
+			Log.e(TAG, "none " + key);
+		}
+		return line.trim().replace("\n", "");
 	}
 }

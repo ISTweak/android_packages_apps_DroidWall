@@ -55,7 +55,7 @@ import android.widget.Toast;
  */
 public final class Api {
 	/** application version string */
-	public static final String VERSION = "1.6.0";
+	public static final String VERSION = "1.6.1";
 	/** special application UID used to indicate "any application" */
 	public static final int SPECIAL_UID_ANY	= -10;
 	/** special application UID used to indicate the Linux Kernel */
@@ -114,15 +114,13 @@ public final class Api {
 	private static String scriptHeader(Context ctx) {
 		final String dir = ctx.getDir("bin", 0).getAbsolutePath();
 		
-		String busybox = "busybox";
+		String busybox = dir + "/busybox_g1";
 		if ( new File("/data/root/bin/busybox").exists() ) {
 			busybox = "/data/root/bin/busybox";
 		} else if ( new File("/data/root/busybox").exists() ) {
 			busybox = "/data/root/busybox";
 		} else if ( new File("/data/local/bin/busybox").exists() ) {
 			busybox = "/data/local/bin/busybox";
-		} else if ( new File(dir + "/busybox_g1").exists() ) {
-			busybox = dir + "/busybox_g1";
 		}
 		
 		String grep = busybox + " grep";
