@@ -151,8 +151,8 @@ public class MainActivity extends Activity implements OnCheckedChangeListener, O
     	if (changed) editor.commit();
     	
     	/* check wimax */
-    	String prop = getProperties("init.svc.wimaxDaemon");
-    	if ( prop.length() > 0 ) {
+    	String prop = getProperties("ro.product.model");
+    	if ( prop.substring(0, 3).equals("ISW") || prop.equals("URBANO PROGRESSO") ) {
     		hasWimax = true;
     	}
     }
